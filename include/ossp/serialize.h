@@ -55,6 +55,9 @@ enum serialized_type : uint8_t {
     ST_STRING,
     ST_UNDEF,
     ST_NIL,
+    ST_BIG_HASH,
+    ST_BIG_ARRAY,
+    ST_BIG_STRING,
     ST_EOD = 69, // 69 = ASCII E / could also be EOF
     ST_ADV_BYTE_1 = 127,
     ST_ADV_BYTE_2,
