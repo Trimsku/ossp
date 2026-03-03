@@ -348,13 +348,25 @@ tl::expected<mrb_value, OSSPErrorInfo> OSSP::SetHashKey(ReadBuffer* rb, mrb_stat
     }
     mrb_value key;
 
-    if (key_type == ST_STRING) {
-        st_counter_t key_size;
-        if (!rb->ReadWithEndian(&key_size, endian)) {
-            auto error = OSSPReadingError;
-            error.position = rb->CurrentReadingPos();
-            return tl::unexpected(error);
+    if (key_type == ST_STRING || key_type == ST_BIG_STRING) {
+        uint64_t key_size;
+
+        if (key_type == ST_STRING) {
+            st_counter_t tmp;
+            if (!rb->ReadWithEndian(&tmp, endian)) {
+                auto error = OSSPReadingError;
+                error.position = rb->CurrentReadingPos();
+                return tl::unexpected(error);
+            }
+            key_size = tmp;
+        } else {
+            if (!rb->ReadWithEndian(&key_size, endian)) {
+                auto error = OSSPReadingError;
+                error.position = rb->CurrentReadingPos();
+                return tl::unexpected(error);
+            }
         }
+
         auto str_ptr = mrb_malloc(state, key_size);
         if (!rb->Read((char*)str_ptr, key_size)) {
             auto error = OSSPReadingError;
@@ -442,11 +454,17 @@ tl::expected<mrb_value, OSSPErrorInfo> OSSP::AddHashKey(ByteBuffer* bb, mrb_stat
     auto key_type = GetType(key);
 
     if (key_type == ST_STRING) {
-        auto s_key = mrb_string_cstr(state, key);
-        bb->AppendWithEndian((uint8_t)ST_STRING, endian);
-        st_counter_t str_len = strlen(s_key); // + 1; we SKIP this intentionally
-        bb->AppendWithEndian(str_len, endian);
-        bb->Append((char*)s_key, str_len);
+        char *ptr = RSTRING_PTR(key);
+        uint64_t len = static_cast<uint64_t>(RSTRING_LEN(key));
+        if (len < 65536) {
+            bb->AppendWithEndian((uint8_t)ST_STRING, endian);
+            bb->AppendWithEndian(static_cast<st_counter_t>(len), endian);
+        }
+        else {
+            bb->AppendWithEndian((uint8_t)ST_BIG_STRING, endian);
+            bb->AppendWithEndian(len, endian);
+        }
+        bb->Append(ptr, len);
     } else if (key_type == ST_SYMBOL) {
         auto s_key = mrb_sym_name(state, mrb_obj_to_sym(state, key));
         bb->AppendWithEndian((uint8_t)ST_SYMBOL, endian);
